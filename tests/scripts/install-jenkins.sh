@@ -1,4 +1,5 @@
 #!/bin/bash -xe
+gcloud config set compute/zone us-east1-d
 gcloud compute networks create jenkins --subnet-mode auto
 gcloud container clusters create jenkins-cd \
         --machine-type n1-standard-2 \
@@ -25,11 +26,22 @@ kubectl create clusterrolebinding tiller-admin-binding --clusterrole=cluster-adm
 # Give tiller a chance to start up
 until ./helm version; do sleep 10;done
 
-./helm install -n cd stable/jenkins -f jenkins/values.yaml --version 0.16.6 --wait
+./helm install -n cd stable/jenkins -f ../../jenkins/values.yaml --version 0.16.6 --wait
 
 for i in `seq 1 5`;do kubectl get pods; sleep 60;done
 
 until kubectl get pods -l app=cd-jenkins | grep Running; do sleep 10;done
+
+sleep 10;
+ 
+printf $(kubectl get secret --namespace default cd-jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 --decode);
+
+export POD_NAME=$(kubectl get pods --namespace default -l "component=cd-jenkins-master" -o jsonpath="{.items[0].metadata.name}");
+
+echo http://127.0.0.1:8080;
+
+kubectl port-forward $POD_NAME 8080:8080;
+
 
 # Cleanup resources
 ./helm delete --purge cd
